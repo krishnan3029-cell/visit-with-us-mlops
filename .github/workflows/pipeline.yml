@@ -1,0 +1,109 @@
+
+name: Complete MLOps Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "data/**"
+      - "scripts/**"
+      - "requirements.txt"
+      - ".github/workflows/pipeline.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate dataset
+        run: python scripts/validate_data.py
+
+  prepare-data:
+    needs: validate-data
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare dataset
+        run: python scripts/prepare_data.py
+
+      - name: Upload processed datasets
+        uses: actions/upload-artifact@v4
+        with:
+          name: processed-data
+          path: artifacts/processed/
+          if-no-files-found: error
+
+  train-model:
+    needs: prepare-data
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download processed datasets
+        uses: actions/download-artifact@v4
+        with:
+          name: processed-data
+          path: artifacts/processed/
+
+      - name: Train and evaluate model
+        run: python scripts/train_model.py
+
+      - name: Upload model and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model-and-reports
+          path: |
+            models/best_model.joblib
+            reports/
+            mlflow.db
+          if-no-files-found: error
+
+      - name: Commit trained model
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -f models/best_model.joblib
+          git add -f reports/metrics.json
+          git add -f reports/best_params.json
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Update trained model and metrics [skip ci]"
+            git push origin HEAD:main
+          else
+            echo "No model changes to commit"
+          fi
