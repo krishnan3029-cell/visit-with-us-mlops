@@ -1,0 +1,61 @@
+
+name: Data Preparation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "data/**"
+      - "scripts/validate_data.py"
+      - "scripts/prepare_data.py"
+      - "requirements.txt"
+      - ".github/workflows/prepare.yml"
+  workflow_dispatch:
+
+jobs:
+  validate-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate dataset
+        run: python scripts/validate_data.py
+
+  prepare-data:
+    needs: validate-data
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run data preparation
+        run: python scripts/prepare_data.py
+
+      - name: Upload train and test datasets
+        uses: actions/upload-artifact@v4
+        with:
+          name: processed-data
+          path: |
+            artifacts/processed/train.csv
+            artifacts/processed/test.csv
+          if-no-files-found: error
+          retention-days: 7
